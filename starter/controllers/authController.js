@@ -70,16 +70,27 @@ exports.protect = catchAsync(async (req, res, next) => {
         return next(new AppError('you are not logged in pls login', 401));
     };
 
-    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET,)
+    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+    console.log('Decoded token:', decoded); // Add logging
 
-    const currentUser = await User.findById(decoded.id);
+    // Select specific fields including _id
+    const currentUser = await User.findById(decoded.id).select('+active');
     if (!currentUser) {
-        return next(new AppError('the user no longer exist', 401))
-    };
+        return next(new AppError('The user belonging to this token no longer exists', 401));
+    }
 
     if (currentUser.changePasswordAfter(decoded.iat)) {
-        return next(new AppError('the user has chaneged his password ,pls log in again', 401))
-    };
+        return next(new AppError('User recently changed password. Please log in again', 401));
+    }
+
+    // Log the user info
+    console.log('Current user:', {
+        id: currentUser._id,
+        name: currentUser.name,
+        role: currentUser.role
+    });
+
+    // Attach the user to the request
     req.user = currentUser;
     next();
 });

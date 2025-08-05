@@ -18,18 +18,19 @@ const handelValidationErrorDB = err => {
 };
 
 const handelJWTError = err => {
-    new AppError('Invalid token , log in again', 401)
+    return new AppError('Invalid token, please log in again', 401);
 };
 
 const handelJWTExpiredError = err => {
-    new AppError('Token Expired , log in again', 401)
+    return new AppError('Token expired, please log in again', 401);
 };
 
 const sendErrorDev = (err, res) => {
+    console.log('Error:', err); // Add logging
     res.status(err.statusCode).json({
         status: err.status,
         error: err,
-        message: err.message,
+        message: err.message || 'An error occurred',
         stack: err.stack
     });
 };
@@ -52,19 +53,29 @@ const sendErrorProd = (err, res) => {
 
 
 module.exports = (err, req, res, next) => {
+    console.log('Original error:', err); // Add logging
+
+    // Ensure we have a proper error object
+    if (!(err instanceof Error)) {
+        err = new AppError(err?.message || 'An unknown error occurred', 500);
+    }
+
     err.statusCode = err.statusCode || 500;
     err.status = err.status || 'error';
 
     if (process.env.NODE_ENV === 'development') {
         sendErrorDev(err, res);
     } else if (process.env.NODE_ENV === 'production') {
-        let error = JSON.parse(JSON.stringify(err)); // Deep copy to preserve properties
+        let error = { ...err };
+        error.message = err.message; // Preserve the message
+        error.name = err.name; // Preserve the name
 
         if (error.name === 'CastError') error = handelCastErrorDB(error);
-        if (error.code === 11000) error = handelDuplicateFieldsDB(error); // ✅ Fix applied
-        if (error.name === 'ValidationalError') error = handelValidationErrorDB(error);
+        if (error.code === 11000) error = handelDuplicateFieldsDB(error);
+        if (error.name === 'ValidationError') error = handelValidationErrorDB(error);
         if (error.name === 'JsonWebTokenError') error = handelJWTError(error);
         if (error.name === 'TokenExpiredError') error = handelJWTExpiredError(error);
+
         sendErrorProd(error, res);
     }
 };
